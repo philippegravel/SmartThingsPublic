@@ -35,8 +35,12 @@ def selectPeople() {
             label title: "Assign a name", required: false
         }
 
-		section("When people arrive and leave..."){
-			input "peopleToWatch", "capability.presenceSensor", title: "Who?", multiple: true, required: true
+		section("When Adult arrive and leave...") {
+			input "adultToWatch", "capability.presenceSensor", title: "Who?", multiple: true, required: true
+		}
+        
+        section("When child arrive") {
+			input "childToWatch", "capability.presenceSensor", title: "Who?", multiple: true, required: false
 		}
         
         section("Delay to keep front light on and unlock door") {
@@ -61,6 +65,7 @@ def selectThings() {
             input "comptoir", "capability.switch", title: "Comptoir", required: true
             input "portelock", "capability.lock", title: "Porte Avant", required: true
             input "shades", "capability.windowShade", title: "Fenetres", required: true
+            input "masterRoom", "capability.switch", title: "Chambre Maitre", required: true
 		}    
 	}        
 }
@@ -81,106 +86,158 @@ def updated() {
 
 def initialize() {
 
-	subscribe(peopleToWatch, "presence", presenseHandler)
+	subscribe(adultToWatch, "presence", presenseAdultHandler)
+    
+    if (childToWatch) {
+    	subscribe(childToWatch, "presence", presenseChildHandler)
+    }
 }
 
-def presenseHandler(evt) {
+def presenseAdultHandler(evt) {
 	
-	log.debug "presenceHandler $evt.name: $evt.value, $evt.displayName"
-    def messages = ""
+	log.debug "presenceAdultHandler $evt.name: $evt.value, $evt.displayName"
 
-    def now = new Date()
-    def sunTime = getSunriseAndSunset()
-    log.debug "sunrise and sunset: $sunTime"
-    def inNight = (now > sunTime.sunset)
-    def delayForLight = false
-    def delayForDoor = false
-    
     if (evt.value == "not present") {
-		log.debug "Someone left"
-        messages = "Someone left ($evt.displayName)"
+		log.debug "Adult left"
+        def messages = "Adult left ($evt.displayName)"
 
-        def presenceValue = peopleToWatch.find{it.currentPresence == "present"}
+        def presenceValue = adultToWatch.find{it.currentPresence == "present"}
         if (presenceValue) {
-        	log.debug "Still somebody home - nothing to do"
-            messages = messages + "\nStill somebody home - nothing to do"
+        	log.debug "Still Adult at home - nothing to do"
+            messages = messages + "\nStill Adult at home - nothing to do"
 		} else {
-        	log.debug "Everybody as left - Do Goodbye!"
-            messages = messages + "\nEverybody as left - Do Goodbye!"
+        	log.debug "Every adult as left - Do Goodbye!"
+            messages = messages + "\nEvery adult as left - Do Goodbye!"
             
-			if (!visitorAtHome()) {
-                portelock.lock()
-                shades.close()
-                setLocationMode("Away")
-            	location.helloHome.execute("All Off")
-                messages = messages + "\nAll off, Mode to Away, door lock!"
+            if (!visitorAtHome()) {
+            	doGoodbyeAction()
             } else {
             	messages = messages + "Visitor at home do nothing!"
             }
-        } 
+        }
+        
+        sendNotificationToContacts(messages, recipients)
+        
+	} else {
+    	log.debug "Adult arrive"
+		doHelloAction("Adult arrive ($evt.displayName)")
+    }    
+}
+
+def presenseChildHandler(evt) {
+	log.debug "presenceChildHandler $evt.name: $evt.value, $evt.displayName"
+
+    if (evt.value == "not present") {
+		log.debug "Child left"
+        def messages = "Child left ($evt.displayName)"
+	
+		if (notAway()) {
+            def presenceValue = adultToWatch.find{it.currentPresence == "present"}
+            if (presenceValue) {
+                log.debug "Still adult at home - nothing to do"
+                messages = messages + "\nStill adult at home - nothing to do"
+            } else {
+                log.debug "No more adult at home - Do Goodbye!"
+                messages = messages + "\nNo more adult at home - Do Goodbye!"
+
+                if (!visitorAtHome()) {
+                	messages = messages + "Normaly do the Goodbye Action"
+                    // doGoodbyeAction()
+                } else {
+                    messages = messages + "Visitor at home do nothing!"
+                }
+            } 
+		} else {
+        	log.debug "Already in Away mode - nothing to do"
+            messages = messages + "\nAlready in Away mode - nothing to do"
+        }
+        
+        sendNotificationToContacts(messages, recipients)
+
 	} else {
     	log.debug "Someone arrive"
-        messages = "Someone arrive ($evt.displayName)"
+        sendNotificationToContacts("Normaly do the Hello Action", recipients)
+        // doHelloAction("Someone arrive ($evt.displayName)")
+    }
+}
 
-		if (notAway()) {
-        	log.debug "Somebody already home"
-            messages = messages + "\nSomebody already home"
-            
-            if (inNight && avant.currentValue("switch") == "off") {
-            	avant.on()
-                delayForLight = true
-                messages = messages + "\nOpen light"
-            }
-            
-		} else {
-        	log.debug "First arrive - Do Hello!"
-            messages = messages + "\nFirst arrive - Do Hello!"
-            
-            if (inNight) {
-                log.debug "Change Mode to Night"
-                messages = messages + "\n- Change Mode to Night"
-				setLocationMode("Night") 
-            } else {
-                log.debug "Change Mode to Home"
-                messages = messages + "\nChange Mode to Home"
-                shades.open()
-            	setLocationMode("Home")
-            }
+def doGoodbyeAction() {
+    portelock.lock()
+    shades.close()
+    setLocationMode("Away")
+    masterRoom.off()
+    location.helloHome.execute("All Off")
+}
 
-			if (inNight) {
-            
-            	comptoir.setLevel(20)
-                entree.setLevel(100)
-                
-                if (avant.currentValue("switch") == "off") {
-                	avant.on()
-					delayForLight = true	
-                }
-            }
+def doHelloAction(startMessage) {
+
+	def messages = startMessage
+    
+    def now = new Date()
+    def sunTime = getSunriseAndSunset()
+    log.debug "sunrise and sunset: $sunTime"
+    def inNight = (now > sunTime.sunset) || (now < sunTime.sunrise)
+    def delayForLight = false
+    def delayForDoor = false
+    
+	if (notAway()) {
+        log.debug "Somebody already home"
+        messages = messages + "\nSomebody already home"
+
+        if (inNight && avant.currentValue("switch") == "off") {
+            avant.on()
+            delayForLight = true
+            messages = messages + "\nOpen light"
+        }
+
+    } else {
+        log.debug "First arrive - Do Hello!"
+        messages = messages + "\nFirst arrive - Do Hello!"
+
+        if (inNight) {
+            log.debug "Change Mode to Evening"
+            messages = messages + "\n- Change Mode to Evening"
+            setLocationMode("Evening") 
+        } else {
+            log.debug "Change Mode to Home"
+            messages = messages + "\nChange Mode to Home"
+            shades.open()
+            setLocationMode("Home")
         }
 
         if (inNight) {
-			def lockstatus = portelock.currentValue("lock")
-    		if (lockstatus == "locked") {
-            	delayForDoor = true
+
+            comptoir.setLevel(20)
+            entree.setLevel(100)
+
+            if (avant.currentValue("switch") == "off") {
+                avant.on()
+                delayForLight = true	
             }
         }
-    	
-        portelock.unlock()
-        messages = messages + "\nUnlock door"
-        
-        if (delayForLight) {
-        	if (delayForDoor) {
-            	runIn(delay * 60, globalDelay)
-                messages = messages + "Set delay for light and door"
-            } else {
-				runIn(delay * 60, closeSwitchsDelay)
-                messages = messages + "Set delay for light Only"                
-            }
-        } else if (delayForDoor) {
-        	runIn(delay * 60, lockDoorDelay)
-			messages = messages + "Set delay for door Only"
+    }
+
+    if (inNight) {
+        def lockstatus = portelock.currentValue("lock")
+        if (lockstatus == "locked") {
+            delayForDoor = true
         }
+    }
+
+    portelock.unlock()
+    messages = messages + "\nUnlock door"
+
+    if (delayForLight) {
+        if (delayForDoor) {
+            runIn(delay * 60, globalDelay)
+            messages = messages + "Set delay for light and door"
+        } else {
+            runIn(delay * 60, closeSwitchsDelay)
+            messages = messages + "Set delay for light Only"                
+        }
+    } else if (delayForDoor) {
+        runIn(delay * 60, lockDoorDelay)
+        messages = messages + "Set delay for door Only"
     }
     
     sendNotificationToContacts(messages, recipients)

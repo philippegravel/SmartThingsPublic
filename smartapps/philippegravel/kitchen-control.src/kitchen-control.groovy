@@ -12,7 +12,8 @@ definition(
     description: "Control of all the kitchen",
     category: "Convenience",
     iconUrl: "http://cdn.device-icons.smartthings.com/Food & Dining/dining5-icn@2x.png",
-    iconX2Url: "http://cdn.device-icons.smartthings.com/Food & Dining/dining5-icn@2x.png"
+    iconX2Url: "http://cdn.device-icons.smartthings.com/Food & Dining/dining5-icn@2x.png",
+    iconX3Url: "http://cdn.device-icons.smartthings.com/Food & Dining/dining5-icn@2x.png"
 )
 
 preferences {
@@ -26,14 +27,11 @@ def Controller() {
     section ("Set the controller") {
       input "buttonDevice", "capability.button", title: "Controller", multiple: false, required: true
     }
-    section(title: "Virtual Controller") {
-    	input "virtualController", "capability.switch", title: "Virtual Controller", required: true
-    }
-    section(title: "Other", mobileOnly:true, hideable: true, hidden: true) {
+    section(title: "Other", mobileOnly:true, hideable: false, hidden: false) {
 		label title: "Assign a name", required: false
     }
     
-	section("Send Notifications?") {
+	section(title: "Send Notifications?", mobileOnly:true, hideable: true, hidden: true) {
     	input("recipients", "contact", title: "Send notifications to", multiple: true, required: false)
     }
   }
@@ -46,11 +44,10 @@ def Cuisine() {
       input "comptoir", "capability.switch", title: "Comptoir:", required: true
       input "pont", "capability.switch", title: "Pont:", required: true
       input "strip", "capability.switch", title: "Dessous comptoir:", required: true
-      input "plafond", "capability.switch", title: "Planfond:", required: true
       input "top", "capability.switch", title: "Planfond couleur:", required: true
       input "dresser", "capability.switch", title: "Vaisselier:", required: true
-      input "portelock", "capability.lock", title: "Porte", required: true
-      input "shades", "capability.windowShade", title: "Fenetres", required: true
+      input "portelock", "capability.lock", title: "Porte:", required: true
+      input "shades", "capability.windowShade", title: "Fenetres:", required: true
     }
   }
 }
@@ -58,9 +55,12 @@ def Cuisine() {
 def Other() {
   dynamicPage(name: "Other", title: "Other setup", install: true, uninstall: true) {
   	section {
-      input "visitor", "capability.switch", title: "Visitor switch", required: true
-      input "outside", "capability.switch", title: "Switch exterieur", required: true
+      input "outside", "capability.switch", title: "Lumiere avant exterieur:", required: true
+      input "living", "capability.switch", title: "Lumiere du salon:", required: true
     }
+    section(title: "Virtual Controller") {
+    	input "virtualController", "capability.switch", title: "Virtual Controller", required: true
+    }    
   }  
 }  
 
@@ -88,11 +88,7 @@ def initialize() {
     }
 
 	subscribe(pont, "switch", pontEvent)
-    subscribe(plafond, "switch", plafondEvent)
-    subscribe(top, "switch", topEvent)
-    
-    subscribe(visitor, "switch", visitorEvent)
-    
+   
     subscribe(virtualController, "level", virtualLevelEvent)
     subscribe(virtualController, "switch", virtualOffEvent)
 }
@@ -155,21 +151,22 @@ def button1Handlers() {
 	log.debug "Kitchen Control: Button 1 Handler"
 
 // On 
+    table.setLevel(100)
 	comptoir.setLevel(100)
+    top.setColor(hex: "#FFFFFF")
+
+    strip.offBlue()
+    strip.offRed()
+    strip.offGreen()
+    strip.setLevelWhite(100)
 
 	atomicState.noPontEvent = true
 	pont.setLevel(100)
     
-    table.setLevel(100)
-
+    if (living.currentSwitch == "off") {
+    	living.setLevel(15)
+	}        
 // Off
-	atomicState.noTopEvent = true
-	top.off()
-    
-    atomicState.noPlafondEvent = true
-    plafond.off()
-    
-    strip.off()
 	dresser.off()
 }
 
@@ -177,7 +174,9 @@ def button2Handlers() {
 	log.debug "Kitchen Control: Button 2 Handler"
 
 	shades.close()
+    top.off()
 	location.helloHome.execute("All Off")
+    setLocationMode("Night")
 }
 
 def button3Handlers() {
@@ -187,51 +186,47 @@ def button3Handlers() {
 	atomicState.noPontEvent = true
     pont.setLevel(40)
     
-    table.setLevel(5)
+    table.setLevel(8)
     dresser.setLevel(100)
+	comptoir.setLevel(2)
 	
     strip.offBlue()
     strip.offRed()
     strip.offGreen()
-    strip.setWhiteLevel(40)
+    strip.setLevelWhite(40)
 
 // Off
-	comptoir.off()
-    
-    atomicState.noTopEvent = true
 	top.off()
-    
-    atomicState.noPlafondEvent = true
-    plafond.off()
 }
 
 def button4Handlers() {
-	log.debug "Kitchen Control: Button 4 Handler"
+	def currentValue = table.currentValue("switch")
+	log.debug "Kitchen Control: Button 4 Handler ($currentValue)"
     
-    portelock.lock()    
+	if (table.currentValue("switch") == "off") {
+	    table.setLevel(100)
+    } else {
+    	table.off()
+    }
 }
 
 def button5Handlers() {
 	log.debug "Kitchen Control: Button 5 Handler"
 
+// On
+	top.setColor(hex: "#1F2440")
+
+	strip.setColor(hex: "#1F2440")
+    strip.offWhite()
+    dresser.setLevel(25)
+
 //  Off 
 	comptoir.off()
     table.off()
+    living.off()
     
     atomicState.noPontEvent = true
     pont.off()
-
-// On
-	atomicState.noTopEvent = true
-	top.setColor(hex: "#1F2440")
-    
-    atomicState.noPlafondEvent = true
-	plafond.on()
-    
-	strip.whiteOff()
-	strip.setColor(hex: "#1F2440")
-    
-    dresser.setLevel(25)
 }
 
 def button6Handlers() {
@@ -266,17 +261,14 @@ def button8Handlers() {
 	atomicState.noPontEvent = true
 	pont.setLevel(100)
     comptoir.setLevel(100)
-
+    strip.offBlue()
+    strip.offRed()
+    strip.offGreen()
+    strip.setLevelWhite(100)
+    
 // Off
     table.off()
-    
-    atomicState.noPlafondEvent = true
-    plafond.off()
-    
-    atomicState.noTopEvent = true
     top.off()
-    
-    strip.off()
     dresser.off()
 }    
 
@@ -286,87 +278,19 @@ def pontEvent(evt) {
 	if (atomicState.noPontEvent) {
     	log.debug "Kicthen Control: Event sent by the app, nothing to do"        
         atomicState.noPontEvent = false
-        
     } else {
        	if (evt.value == "on") {
-        	log.debug "Kicthen Control: Turn On strip and Dresser"
+        	log.debug "Kicthen Control: Turn On strip"
             
             strip.offBlue()
             strip.offRed()
             strip.offGreen()
 			strip.setLevelWhite(100)
-            
-            dresser.setLevel(100)
 		} else {
-        	log.debug "Kicthen Control: Turn Off strip and Dresser"
-
+        	log.debug "Kicthen Control: Turn Off strip"
 			strip.off()
-            dresser.off()
         }
     }
-}
-
-def plafondEvent(evt) {
-	log.debug "Kicthen Control: Plafond - $evt.name: $evt.value"
-    def messages = "Kitchen Control: Switch Planfond - $evt.name: $evt.value"
-	   
-	if (atomicState.noPlafondEvent) {
-    	log.debug "Kicthen Control: Event sent by the app, nothing to do"
-    	atomicState.noPlafondEvent = false
-        messages = messages + "\nSend by Apps - nothing to do"
-        
-	} else {
-	    atomicState.noTopEvent = true
-        
-    	if (evt.value == "on") {
-        	log.debug "Kicthen Control: Turn on Plafond Couleur"
-            
-            top.setColor(hex: "#FFFFFF")
-            //top.warmWhite()
-            
-            messages = messages + "\nLed - Set at WarmWhite"
-        } else {
-        	log.debug "Kicthen Control: Turn Off Plafond Couleur" 
-            
-            top.off()
-            messages = messages + "\nLed - Off"
-        }
-    }
-    
-    sendNotificationToContacts(messages, recipients)
-}
-
-def topEvent(evt) {
-	log.debug "Kicthen Control: Top - $evt.name: $evt.value"
-    def messages = "Kitchen Control: Led - $evt.name: $evt.value"
-    
-    if (atomicState.noTopEvent) {
-    	log.debug "Kicthen Control: Event sent by the app, nothing to do"        
-        atomicState.noTopEvent = false     
-        messages = messages + "\nSend by Apps - nothing to do"
-    } else {
-	    atomicState.noPlafondEvent = true
-
-		if (evt.value == "on") {
-        	log.debug "Kicthen Control: Turn on Plafond switch"
-            
-            plafond.on()
-			messages = messages + "\nSwitch Planfond - Set to On"
-        } else {
-        	log.debug "Kicthen Control: Turn Off Plafond"
-            
-            plafond.off()
-   			messages = messages + "\nSwitch Planfond - Set to Off"
-        }
-    }
-    
-    sendNotificationToContacts(messages, recipients)
-}
-
-def visitorEvent(evt) {
-	log.debug "Kicthen Control: Visitor - $evt.name: $evt.value"
-
-	sendNotificationEvent("Visitor Switch set to $evt.value")
 }
 
 def virtualLevelEvent(evt) {
@@ -378,57 +302,45 @@ def virtualLevelEvent(evt) {
     } else {
         def level = Integer.parseInt(evt.value)
 
-        if (level >= 10 && level <= 19) {
-        	if (level == 10) {
-            	atomicState.noVirtualEvent = true
-                virtualController.setLevel(11)
-            }
+        if (level == 1 || (level >= 10 && level <= 19)) {
+            atomicState.noVirtualEvent = true
+            virtualController.setLevel(99)
             button1Handlers()
-        } else if (level >= 20 && level <= 29) {
-        	if (level == 20) {
-            	atomicState.noVirtualEvent = true
-                virtualController.setLevel(21)
-            }
+        } else if (level == 4 || (level >= 20 && level <= 29)) {
+            atomicState.noVirtualEvent = true
+            virtualController.setLevel(99)
             button2Handlers()
-        } else if (level >= 30 && level <= 39) {
-        	if (level == 30) {
-            	atomicState.noVirtualEvent = true
-                virtualController.setLevel(31)
-            }
+        } else if (level == 2 || (level >= 30 && level <= 39)) {
+            atomicState.noVirtualEvent = true
+            virtualController.setLevel(99)
             button3Handlers()
-        } else if (level >= 40 && level <= 49) {
-        	if (level == 40) {
-            	atomicState.noVirtualEvent = true
-                virtualController.setLevel(41)
-            }
+        } else if (level == 5 || (level >= 40 && level <= 49)) {
+            atomicState.noVirtualEvent = true
+            virtualController.setLevel(99)
             button4Handlers()
-        } else if (level >= 50 && level <= 59) {
-        	if (level == 50) {
-            	atomicState.noVirtualEvent = true
-                virtualController.setLevel(51)
-            }
+        } else if (level == 3 || (level >= 50 && level <= 59)) {
             button5Handlers()
-        } else if (level >= 60 && level <= 69) {
-        	if (level == 60) {
-            	atomicState.noVirtualEvent = true
-                virtualController.setLevel(61)
-            }
+            atomicState.noVirtualEvent = true
+            virtualController.setLevel(99)
+        } else if (level == 6 || (level >= 60 && level <= 69)) {
+            atomicState.noVirtualEvent = true
+            virtualController.setLevel(99)
             button6Handlers()
-        } else if (level >= 70 && level <= 79) {
-        	if (level == 70) {
-            	atomicState.noVirtualEvent = true
-                virtualController.setLevel(71)
-            }
+        } else if (level == 7 || (level >= 70 && level <= 79)) {
+            atomicState.noVirtualEvent = true
+            virtualController.setLevel(99)
             button7Handlers()
-        } else if (level == 02) {
+        } else if (level == 92) {
+        	atomicState.noVirtualEvent = true
             colorChangeMode(1) // Christmass
-        } else if (level == 03) {
+            virtualController.setLevel(99)
+        } else if (level == 93) {
             colorChangeMode(2) // Frozen
-        } else if (level == 04) { 
+        } else if (level == 94) { 
             colorChangeMode(3) // Spider Man
-        } else if (level == 05) { 
+        } else if (level == 95) { 
             colorChangeMode(4) // Hulk
-        } else if (level == 06) { 
+        } else if (level == 96) { 
             colorChangeMode(5) // Pastel
         }    
 	}
@@ -444,9 +356,6 @@ def virtualOffEvent(evt) {
             strip.off()
             top.off()
         }
-        
-        atomicState.noTopEvent = false     
-        atomicState.noPlafondEvent = false
         atomicState.noPontEvent = false
     }
 }
@@ -457,15 +366,6 @@ def colorChangeMode(mode) {
 
 	atomicState.inKitchenEvent = true
     
-// Off 
-	comptoir.off()
-    pont.off()
-    table.off()
-	    
-//On
-	plafond.on()
-//
-
 	atomicState.colorChangeMode = mode
 	atomicState.currentColorNumber = -1
     
@@ -485,11 +385,12 @@ def colorChangeSwitch() {
     def mode = atomicState.colorChangeMode
 
     if (mode != 0) {
-        def currentColor = getNextColor(mode)
+        def currentColorTop = getNextColor(mode, true)
+        def currentColorStrip = getNextColor(mode, false)
 
-        if (currentColor) {
-            top.setColor(hex: currentColor)
-            strip.setColor(hex: currentColor)    
+        if (currentColorTop && currentColorStrip) {
+            top.setColor(hex: currentColorTop)
+            strip.setColor(hex: currentColorStrip)    
             runIn(60, colorChangeSwitch, [overwrite: false])
         } else { 
             log.debug "No color found - stop"
@@ -499,7 +400,7 @@ def colorChangeSwitch() {
     }
 }
 
-def getNextColor(mode) {
+def getNextColor(mode, updateCurrentColor) {
 	
     log.debug "Mode [$mode]"
     
@@ -560,7 +461,9 @@ def getNextColor(mode) {
         }
     }
 
-	atomicState.currentColorNumber = newColor
+	if (updateCurrentColor) {
+		atomicState.currentColorNumber = newColor
+    }
     
     return colorToReturn
 }

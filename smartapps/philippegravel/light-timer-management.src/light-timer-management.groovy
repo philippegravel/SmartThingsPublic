@@ -26,10 +26,15 @@ definition(
 
 preferences {
 	input "lights", "capability.switch", title: "Lights", required: true, multiple: true
+    
 	section("Time to and close the light(s)") {
     	input "openTime", "time", title: "Open at", required: true
         input "closeTime", "time", title: "Close at", required: true
 	}
+    
+    section("Active/Inactive") {
+    	input "active", "boolean", title: "Timer Active?", required: true
+    }
     
 	section("Send Notifications?") {
 		input("recipients", "contact", title: "Send notifications to", multiple: true, required: false)
@@ -48,21 +53,24 @@ def updated() {
 
 def initialize() {
 	log.debug "$app.label Initialize"
-
-	def timeZone = location.timeZone
-	def currentTime = timeToday(openTime, timeZone)
-	def timeOpenHour = currentTime.format("H", timeZone)
-	def timeOpenMinute = currentTime.format("m", timeZone)
-    log.debug "Open: $timeOpenHour:$timeOpenMinute"
-	schedule("0 $timeOpenMinute $timeOpenHour ? * * *", openHandler)
     
-    currentTime = timeToday(closeTime, timeZone)
- 	def timeCloseHour = currentTime.format('H', timeZone)
-    def timeCloseMinute = currentTime.format('m', timeZone)
- 	log.debug "Close: $timeCloseHour:$timeCloseMinute"
-    schedule("0 $timeCloseMinute $timeCloseHour ? * * *", closeHandler)
+    if (active) {
 
-    sendNotificationToContacts("$app.label\nOpen at $timeOpenHour:$timeOpenMinute\nClose at $timeCloseHour:$timeCloseMinute", recipients)
+        def timeZone = location.timeZone
+        def currentTime = timeToday(openTime, timeZone)
+        def timeOpenHour = currentTime.format("H", timeZone)
+        def timeOpenMinute = currentTime.format("m", timeZone)
+        log.debug "Open: $timeOpenHour:$timeOpenMinute"
+        schedule("0 $timeOpenMinute $timeOpenHour ? * * *", openHandler)
+
+        currentTime = timeToday(closeTime, timeZone)
+        def timeCloseHour = currentTime.format('H', timeZone)
+        def timeCloseMinute = currentTime.format('m', timeZone)
+        log.debug "Close: $timeCloseHour:$timeCloseMinute"
+        schedule("0 $timeCloseMinute $timeCloseHour ? * * *", closeHandler)
+
+        sendNotificationToContacts("$app.label\nOpen at $timeOpenHour:$timeOpenMinute\nClose at $timeCloseHour:$timeCloseMinute", recipients)
+	}
 }
 
 def openHandler() {

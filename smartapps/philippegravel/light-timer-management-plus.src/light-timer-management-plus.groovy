@@ -25,8 +25,8 @@ definition(
 )
 
 preferences {
-	input "lights", "capability.switch", title: "Lights without presence", required: true, multiple: true
-   	input "lightsVerif", "capability.switch", title: "Lights with presence needed", required: true, multiple: true
+	input "lights", "capability.switch", title: "Lights without presence", required: false, multiple: true
+   	input "lightsVerif", "capability.switch", title: "Lights with presence needed", required: false, multiple: true
     
 	section("Time to and close the light(s)") {
     	input "openTime", "time", title: "Open at", required: true
@@ -41,6 +41,9 @@ preferences {
         input "visitorSwitch", "capability.switch", title: "Visitor Switch?", required: true
     }
         
+    section("Active/Inactive") {
+    	input "active", "boolean", title: "Timer Active?", required: true
+    }
     
 	section("Send Notifications?") {
 		input("recipients", "contact", title: "Send notifications to", multiple: true, required: false)
@@ -59,51 +62,66 @@ def updated() {
 
 def initialize() {
 	log.debug "$app.label Initialize"
-
-	def timeZone = location.timeZone
-	def currentTime = timeToday(openTime, timeZone)
-	def timeOpenHour = currentTime.format("H", timeZone)
-	def timeOpenMinute = currentTime.format("m", timeZone)
-    log.debug "Open: $timeOpenHour:$timeOpenMinute"
-	schedule("0 $timeOpenMinute $timeOpenHour ? * * *", openHandler)
     
-    currentTime = timeToday(closeTime, timeZone)
- 	def timeCloseHour = currentTime.format('H', timeZone)
-    def timeCloseMinute = currentTime.format('m', timeZone)
- 	log.debug "Close: $timeCloseHour:$timeCloseMinute"
-    schedule("0 $timeCloseMinute $timeCloseHour ? * * *", closeHandler)
+    if (active) {
 
-    sendNotificationToContacts("$app.label\nOpen at $timeOpenHour:$timeOpenMinute\nClose at $timeCloseHour:$timeCloseMinute", recipients)
-    
-    subscribe(peopleToWatch, "presence", presenseHandler)
+        def timeZone = location.timeZone
+        def currentTime = timeToday(openTime, timeZone)
+        def timeOpenHour = currentTime.format("H", timeZone)
+        def timeOpenMinute = currentTime.format("m", timeZone)
+        log.debug "Open: $timeOpenHour:$timeOpenMinute"
+        schedule("0 $timeOpenMinute $timeOpenHour ? * * *", openHandler)
+
+        currentTime = timeToday(closeTime, timeZone)
+        def timeCloseHour = currentTime.format('H', timeZone)
+        def timeCloseMinute = currentTime.format('m', timeZone)
+        log.debug "Close: $timeCloseHour:$timeCloseMinute"
+        schedule("0 $timeCloseMinute $timeCloseHour ? * * *", closeHandler)
+
+        sendNotificationToContacts("$app.label\nOpen at $timeOpenHour:$timeOpenMinute\nClose at $timeCloseHour:$timeCloseMinute", recipients)
+
+        if (lightsVerif != null) {
+            subscribe(peopleToWatch, "presence", presenseHandler)
+        }
+	}
 }
 
 def openHandler() {
 
 	def messages = "$app.label: "
     
-    log.debug "$app.label: Open Light $lights.displayName"
-    lights.on()
-    
-	def presenceValue = peopleToWatch.find{it.currentPresence == "present"}
-    if (presenceValue || visitorAtHome()) {
-		log.debug "$app.label: Somebody home - Open! $lightsVerif.displayName"
-        messages = messages + "Somebody home - Open! $lightsVerif.name"
-  
-    	lightsVerif.on()
-        
-    } else {
-    	log.debug "$app.label: Nobody at home, stay the lights close!"
-        messages = messages + "Nobody at home, stay the lights close!"
+    if (lights != null) {
+    	log.debug "$app.label: Open Light $lights.displayName"
+    	lights.on()
     }
-            
+    
+    if (lightsVerif != null) {
+        def presenceValue = peopleToWatch.find{it.currentPresence == "present"}
+        if (presenceValue || visitorAtHome()) {
+            log.debug "$app.label: Somebody home - Open! $lightsVerif.displayName"
+            messages = messages + "Somebody home - Open! $lightsVerif.name"
+
+            lightsVerif.on()
+
+        } else {
+            log.debug "$app.label: Nobody at home, stay the lights close!"
+            messages = messages + "Nobody at home, stay the lights close!"
+        }
+	}
+    
 	sendNotificationToContacts(messages, recipients)
 }
 
 def closeHandler() {
 	sendNotificationToContacts("$app.label Close!", recipients)
-	lights.off()
-    lightsVerif.off()
+    
+    if (lights != null) {
+		lights.off()
+    }
+    
+    if (lightsVerif != null) {
+    	lightsVerif.off()
+    }
 }
 
 def presenseHandler(evt) {

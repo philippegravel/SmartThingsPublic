@@ -39,14 +39,17 @@ def Passage () {
         }
         section("Turning on when there's movement..."){
             input "motionSensor", "capability.motionSensor", title: "Where (sensor)?", required: true
-            input "inModeOnly", "mode", title: "Open only in mode?", required: false
         }
         section("And then off when it's light or there's been no movement for..."){
             input "delaySeconds", "number", title: "Seconds?", required: true
         }
         section("Percent of light when motion...") {
-            input "percentLight", "number", title:"Light Percent?", required: true
-            input "percentLightDefault", "number", title:"Default light open (default 100)?", required: false
+            input "percentLightLow", "number", title:"Light Percent?", required: true
+            input "percentLightHigh", "number", title:"Default light open?", required: true, defaultValue: 100
+        }
+        
+        section ("Time to stop") {
+            input "timeStopOpen", "time", title: "Time to Stop open?", required: true
         }
     }    
 }
@@ -62,6 +65,9 @@ def updated() {
 }
 
 def initialize() {
+
+    def stopOpenAtTime = timeToday(timeStopOpen, location.timeZone)
+    
 	subscribe(motionSensor, "motion", motionHandler)
     subscribe(light, "switch", switchHandler)
 }
@@ -70,24 +76,29 @@ def motionHandler(evt) {
 	log.debug "$evt.name: $evt.value"
   
     atomicState.inProcess = true
-    
+   
     if (evt.value == "active" ) {
     	log.debug "Passage Manager: Current mode: $location.mode, Current Switch: $light.currentSwitch"
         
-    	if ((inModeOnly == null || location.mode == inModeOnly) && light.currentSwitch == "off") {
-            log.debug "Passage Manager: turning on lights due to motion (at $percentLight%)"
+    	if (light.currentSwitch == "off") {
 
-            atomicState.lastStatus = "on"
-            
-            light.setLevel(percentLight)
-            
-//            log.debug "Light Value: $light.currentSwitch"
-//            while (light.currentSwitch == "off") {
-//            	pause(500)	
-//	            log.debug "Light Value: $light.currentSwitch"
-//            }
-            
-            atomicState.motionStopTime = null
+			if (location.mode == "Evening") {
+				log.debug "Passage Manager: turning on lights due to motion (at $percentLightHigh%)"
+
+                atomicState.lastStatus = "on"
+				light.setLevel(percentLightHigh)
+                atomicState.motionStopTime = null
+        	} else if (location.mode == "Night") {
+            	
+                def now = new Date()	
+                def sunTime = getSunriseAndSunset()
+                
+                if ((now > sunTime.sunset) || (now < stopOpenAtTime)){
+                	atomicState.lastStatus = "on"
+                    light.setLevel(percentLightLow)
+	                atomicState.motionStopTime = null
+                }
+        	}        
         }
     } else if (atomicState.lastStatus == "on") {
         log.debug "Passage Manager $evt.name: $evt.value, $evt.displayName"
@@ -126,11 +137,7 @@ def switchHandler(evt) {
     
         if (atomicState.lastStatus == "off") {
             log.debug "Passage Manager: Change percent to $percentLightDefault"
-            if (percentLightDefault) {
-                light.setLevel(percentLightDefault) 
-            } else { 
-                light.setLevel(100)
-            }
+            light.setLevel(percentLightDefault) 
         }           
     } else if (evt.value == "off") {
         atomicState.lastStatus = "off"

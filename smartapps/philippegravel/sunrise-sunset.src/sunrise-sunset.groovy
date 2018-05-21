@@ -124,8 +124,8 @@ def sunsetHandler(evt) {
     def messages = "Sun has set!"
 
     if (notAway()) {
-	    setLocationMode("Night")
-        messages = messages + "\n- Set Mode Night"
+	    setLocationMode("Evening")
+        messages = messages + "\n- Set Mode Evening"
 	}        
     
  	def timeZone = location.timeZone

@@ -14,10 +14,10 @@
  *
  */
 definition(
-    name: "Close after time",
+    name: "Virtual Set Control",
     namespace: "philippegravel",
     author: "Philippe Gravel",
-    description: "Close light after amount of seconds",
+    description: "Virtual Set Control",
     category: "Convenience",
     iconUrl: "http://cdn.device-icons.smartthings.com/Office/office6-icn@2x.png",
     iconX2Url: "http://cdn.device-icons.smartthings.com/Office/office6-icn@2x.png",
@@ -26,8 +26,9 @@ definition(
 
 preferences {
 	section("Switch to be set") {
-		input "theSwitch", "capability.switch", title: "Switch?", required: true
- 	   	input "delaySeconds", "number", title:"Number of seconds?", required: true
+		input "theSwitch", "capability.switch", title: "Switch to start?", required: true
+		input "theScene", "capability.switch", title: "Switch to control Scene?", required: true
+		input "theLevel", "number", title: "Number on Control Scene?", required: true
 	}
 }
 
@@ -50,13 +51,7 @@ def initialize() {
 
 def onHandler(evt) {
 	log.debug "Events: " + evt.displayName
-    
-   	def fireTime = new Date(new Date().time + (delaySeconds * 1000))
-	runOnce(fireTime, turnOffAfterDelay, [overwrite: true])
-}
 
-def turnOffAfterDelay() {
-	log.debug "Turn Off after delay: " + theSwitch.displayName
-
-	theSwitch.off()
+	theScene.setLevel(theLevel)
+    theSwitch
 }
